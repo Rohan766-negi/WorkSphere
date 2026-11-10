@@ -51,8 +51,12 @@ export interface VenueFilterBarProps {
   filters?: VenueFilterItem[];
   /** Controlled selected filter IDs. When omitted, URL params drive selection. */
   selectedFilters?: string[];
+  /** Alias for selectedFilters — controlled selected amenity IDs. */
+  selectedAmenities?: string[];
   /** Called when a filter is toggled. Receives (filterId, isNowActive). */
   onToggleFilter?: (filterId: string, active: boolean) => void;
+  /** Called when the selected filters change (e.g. toggled or reset). Receives (activeFilterIds). */
+  onFilterChange?: (filters: string[]) => void;
   /** Category tabs list. When provided or by default, renders category pill tabs. */
   categories?: VenueCategoryItem[];
   /** Controlled active category tab ID. */
@@ -154,7 +158,9 @@ function buildMaskImage(edge: ScrollEdge): string {
 export function VenueFilterBar({
   filters = DEFAULT_VENUE_FILTERS,
   selectedFilters: controlledSelected,
+  selectedAmenities: controlledAmenities,
   onToggleFilter,
+  onFilterChange,
   categories = DEFAULT_VENUE_CATEGORIES,
   selectedCategory: controlledSelectedCategory,
   activeCategory: controlledActiveCategory,
@@ -384,15 +390,17 @@ export function VenueFilterBar({
   }, [isPopoverOpen]);
 
   // -------------------------------------------------------------------------
-  // Derive active set from URL or controlled prop
+  // Derive active set and selected amenities from URL or controlled prop
   // -------------------------------------------------------------------------
 
-  const activeSet = React.useMemo(() => {
-    if (controlledSelected !== undefined) {
-      return new Set(controlledSelected);
-    }
-    if (!searchParams) return new Set<string>();
+  // Check whether controlled props are provided
+  // selectedAmenities takes precedence over selectedFilters
+  const controlledAmenitiesList =
+    controlledAmenities !== undefined ? controlledAmenities : controlledSelected;
+  const isControlled = controlledAmenitiesList !== undefined;
 
+  const urlAmenities = React.useMemo(() => {
+    if (!searchParams) return [];
     const set = new Set<string>();
     filters.forEach((f) => {
       const val = searchParams.get(f.paramKey);
@@ -402,11 +410,40 @@ export function VenueFilterBar({
     // Also honour comma-separated `amenities` param for interoperability
     const amenitiesParam = searchParams.get("amenities");
     if (amenitiesParam) {
-      amenitiesParam.split(",").forEach((a) => set.add(a.trim()));
+      amenitiesParam.split(",").forEach((a) => {
+        const trimmed = a.trim();
+        if (trimmed) set.add(trimmed);
+      });
     }
 
-    return set;
-  }, [controlledSelected, searchParams, filters]);
+    return Array.from(set);
+  }, [searchParams, filters]);
+
+  const [internalFilters, setInternalFilters] = useState<string[]>(() => {
+    if (controlledAmenitiesList !== undefined) {
+      return controlledAmenitiesList;
+    }
+    return urlAmenities;
+  });
+
+  useEffect(() => {
+    if (controlledAmenitiesList !== undefined) {
+      setInternalFilters(controlledAmenitiesList);
+    } else if (syncWithUrl) {
+      setInternalFilters(urlAmenities);
+    }
+  }, [controlledAmenitiesList, syncWithUrl, urlAmenities]);
+
+  const selectedAmenities = React.useMemo(() => {
+    if (isControlled && controlledAmenitiesList !== undefined) {
+      return Array.from(new Set(controlledAmenitiesList));
+    }
+    return internalFilters;
+  }, [isControlled, controlledAmenitiesList, internalFilters]);
+
+  const activeSet = React.useMemo(() => {
+    return new Set(selectedAmenities);
+  }, [selectedAmenities]);
 
   // -------------------------------------------------------------------------
   // Scroll-edge detection — drives the mask-image gradient
@@ -456,6 +493,15 @@ export function VenueFilterBar({
 
       onToggleFilter?.(item.id, nextState);
 
+      const nextAmenities = nextState
+        ? [...selectedAmenities, item.id]
+        : selectedAmenities.filter((id) => id !== item.id);
+      onFilterChange?.(nextAmenities);
+
+      if (!isControlled) {
+        setInternalFilters(nextAmenities);
+      }
+
       if (syncWithUrl && pathname && router) {
         const params = new URLSearchParams(
           searchParams ? searchParams.toString() : "",
@@ -485,8 +531,69 @@ export function VenueFilterBar({
         router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
       }
     },
-    [activeSet, onToggleFilter, syncWithUrl, pathname, router, searchParams],
+    [
+      activeSet,
+      selectedAmenities,
+      isControlled,
+      onToggleFilter,
+      onFilterChange,
+      syncWithUrl,
+      pathname,
+      router,
+      searchParams,
+    ],
   );
+
+  // -------------------------------------------------------------------------
+  // Reset handler for amenity filters
+  // -------------------------------------------------------------------------
+
+  const handleResetFilters = useCallback(() => {
+    // Atomically notify parent with empty filter array
+    onFilterChange?.([]);
+
+    // Prevent duplicate or conflicting parent state updates:
+    // Only invoke onToggleFilter if onFilterChange is not provided
+    if (!onFilterChange && onToggleFilter) {
+      selectedAmenities.forEach((id) => {
+        onToggleFilter(id, false);
+      });
+    }
+
+    // Reset local uncontrolled state
+    if (!isControlled) {
+      setInternalFilters([]);
+    }
+
+    // Clear amenity URL search parameters while preserving unrelated query params
+    if (syncWithUrl && pathname && router) {
+      const params = new URLSearchParams(
+        searchParams ? searchParams.toString() : "",
+      );
+
+      filters.forEach((f) => {
+        params.delete(f.paramKey);
+        params.delete(f.id);
+      });
+      selectedAmenities.forEach((id) => {
+        params.delete(id);
+      });
+      params.delete("amenities");
+
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }
+  }, [
+    onFilterChange,
+    onToggleFilter,
+    selectedAmenities,
+    isControlled,
+    filters,
+    syncWithUrl,
+    pathname,
+    router,
+    searchParams,
+  ]);
 
   // -------------------------------------------------------------------------
   // Range filters Apply and Reset handlers
@@ -723,6 +830,30 @@ export function VenueFilterBar({
               </button>
             );
           })}
+
+          {/* Reset Filters Button */}
+          {selectedAmenities.length > 0 && (
+            <button
+              type="button"
+              data-testid="reset-filters-button"
+              aria-label={`Reset filters (${selectedAmenities.length})`}
+              onClick={handleResetFilters}
+              className={cn(
+                "relative inline-flex items-center justify-center gap-1.5",
+                "min-h-[44px] px-3 rounded-full",
+                "text-xs font-semibold shrink-0 select-none",
+                "transition-all duration-200 active:scale-95 border",
+                "bg-zinc-100 hover:bg-zinc-200/80 text-zinc-700 border-zinc-200/80",
+                "dark:bg-zinc-800/80 dark:hover:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700/80",
+                "hover:text-rose-600 dark:hover:text-rose-400 hover:border-rose-300 dark:hover:border-rose-800/50",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                "animate-in fade-in duration-200",
+              )}
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Reset filters ({selectedAmenities.length})</span>
+            </button>
+          )}
         </div>
       </div>
 

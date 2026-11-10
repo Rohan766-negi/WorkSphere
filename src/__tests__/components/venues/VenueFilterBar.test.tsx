@@ -262,18 +262,38 @@ describe("VenueFilterBar Component", () => {
     });
   });
 
-  describe("Toggling Filters", () => {
-    it("calls onToggleFilter and updates URL when a pill is clicked", () => {
+  describe("Toggling Filters & Callbacks", () => {
+    it("calls onToggleFilter and onFilterChange and updates URL when a pill is clicked", () => {
       const onToggle = jest.fn();
-      render(<VenueFilterBar onToggleFilter={onToggle} />);
+      const onChange = jest.fn();
+      render(<VenueFilterBar onToggleFilter={onToggle} onFilterChange={onChange} />);
 
       const wifiPill = screen.getByTestId("venue-filter-pill-wifi");
       fireEvent.click(wifiPill);
 
       expect(onToggle).toHaveBeenCalledWith("wifi", true);
+      expect(onChange).toHaveBeenCalledWith(["wifi"]);
       expect(mockReplace).toHaveBeenCalledWith("/venues?wifi=true", {
         scroll: false,
       });
+    });
+
+    it("removes amenity and updates callbacks when an active pill is clicked", () => {
+      const onToggle = jest.fn();
+      const onChange = jest.fn();
+      render(
+        <VenueFilterBar
+          selectedAmenities={["wifi", "coffee"]}
+          onToggleFilter={onToggle}
+          onFilterChange={onChange}
+        />,
+      );
+
+      const wifiPill = screen.getByTestId("venue-filter-pill-wifi");
+      fireEvent.click(wifiPill);
+
+      expect(onToggle).toHaveBeenCalledWith("wifi", false);
+      expect(onChange).toHaveBeenCalledWith(["coffee"]);
     });
 
     it("respects controlled selectedFilters", () => {
@@ -285,6 +305,220 @@ describe("VenueFilterBar Component", () => {
 
       const outletsPill = screen.getByTestId("venue-filter-pill-outlets");
       expect(outletsPill).toHaveAttribute("aria-checked", "false");
+    });
+
+    it("respects controlled selectedAmenities prop", () => {
+      render(<VenueFilterBar selectedAmenities={["quiet", "outdoor"]} />);
+
+      const quietPill = screen.getByTestId("venue-filter-pill-quiet");
+      const outdoorPill = screen.getByTestId("venue-filter-pill-outdoor");
+      const wifiPill = screen.getByTestId("venue-filter-pill-wifi");
+
+      expect(quietPill).toHaveAttribute("aria-checked", "true");
+      expect(outdoorPill).toHaveAttribute("aria-checked", "true");
+      expect(wifiPill).toHaveAttribute("aria-checked", "false");
+    });
+
+    it("prioritizes selectedAmenities over selectedFilters when both are provided", () => {
+      render(
+        <VenueFilterBar
+          selectedAmenities={["coffee"]}
+          selectedFilters={["wifi", "outlets"]}
+        />,
+      );
+
+      const coffeePill = screen.getByTestId("venue-filter-pill-coffee");
+      const wifiPill = screen.getByTestId("venue-filter-pill-wifi");
+
+      expect(coffeePill).toHaveAttribute("aria-checked", "true");
+      expect(wifiPill).toHaveAttribute("aria-checked", "false");
+    });
+
+    it("handles empty array selectedAmenities={[]} taking precedence over selectedFilters", () => {
+      render(
+        <VenueFilterBar
+          selectedAmenities={[]}
+          selectedFilters={["wifi", "outlets"]}
+        />,
+      );
+
+      const wifiPill = screen.getByTestId("venue-filter-pill-wifi");
+      const outletsPill = screen.getByTestId("venue-filter-pill-outlets");
+
+      expect(wifiPill).toHaveAttribute("aria-checked", "false");
+      expect(outletsPill).toHaveAttribute("aria-checked", "false");
+      expect(screen.queryByTestId("reset-filters-button")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Reset Filters Button (#7375)", () => {
+    it("is not rendered when no amenities are selected", () => {
+      render(<VenueFilterBar selectedAmenities={[]} />);
+      expect(screen.queryByTestId("reset-filters-button")).not.toBeInTheDocument();
+    });
+
+    it("renders with correct count label when 1 amenity is selected", () => {
+      render(<VenueFilterBar selectedAmenities={["wifi"]} />);
+
+      const resetBtn = screen.getByTestId("reset-filters-button");
+      expect(resetBtn).toBeInTheDocument();
+      expect(resetBtn).toHaveTextContent("Reset filters (1)");
+      expect(resetBtn).toHaveAttribute("aria-label", "Reset filters (1)");
+      expect(resetBtn).toHaveAttribute("type", "button");
+      expect(resetBtn.className).toContain("min-h-[44px]");
+    });
+
+    it("renders with correct count label when 3 amenities are selected", () => {
+      render(<VenueFilterBar selectedAmenities={["wifi", "outlets", "quiet"]} />);
+
+      const resetBtn = screen.getByTestId("reset-filters-button");
+      expect(resetBtn).toBeInTheDocument();
+      expect(resetBtn).toHaveTextContent("Reset filters (3)");
+      expect(resetBtn).toHaveAttribute("aria-label", "Reset filters (3)");
+    });
+
+    it("renders from URL params when uncontrolled", () => {
+      (useSearchParams as jest.Mock).mockReturnValue(
+        new URLSearchParams("wifi=true&coffee=true"),
+      );
+      render(<VenueFilterBar />);
+
+      const resetBtn = screen.getByTestId("reset-filters-button");
+      expect(resetBtn).toBeInTheDocument();
+      expect(resetBtn).toHaveTextContent("Reset filters (2)");
+    });
+
+    it("calls onFilterChange atomically with [] on click", () => {
+      const onFilterChange = jest.fn();
+      render(
+        <VenueFilterBar
+          selectedAmenities={["wifi", "quiet"]}
+          onFilterChange={onFilterChange}
+        />,
+      );
+
+      const resetBtn = screen.getByTestId("reset-filters-button");
+      fireEvent.click(resetBtn);
+
+      expect(onFilterChange).toHaveBeenCalledTimes(1);
+      expect(onFilterChange).toHaveBeenCalledWith([]);
+    });
+
+    it("does not call onToggleFilter repeatedly when onFilterChange is provided to avoid duplicate updates", () => {
+      const onFilterChange = jest.fn();
+      const onToggleFilter = jest.fn();
+      render(
+        <VenueFilterBar
+          selectedAmenities={["wifi", "quiet", "coffee"]}
+          onFilterChange={onFilterChange}
+          onToggleFilter={onToggleFilter}
+        />,
+      );
+
+      const resetBtn = screen.getByTestId("reset-filters-button");
+      fireEvent.click(resetBtn);
+
+      expect(onFilterChange).toHaveBeenCalledTimes(1);
+      expect(onFilterChange).toHaveBeenCalledWith([]);
+      // onToggleFilter should NOT be called to avoid N duplicate / conflicting parent updates
+      expect(onToggleFilter).not.toHaveBeenCalled();
+    });
+
+    it("falls back to calling onToggleFilter(id, false) for each filter when onFilterChange is not provided", () => {
+      const onToggleFilter = jest.fn();
+      render(
+        <VenueFilterBar
+          selectedAmenities={["wifi", "quiet"]}
+          onToggleFilter={onToggleFilter}
+        />,
+      );
+
+      const resetBtn = screen.getByTestId("reset-filters-button");
+      fireEvent.click(resetBtn);
+
+      expect(onToggleFilter).toHaveBeenCalledTimes(2);
+      expect(onToggleFilter).toHaveBeenCalledWith("wifi", false);
+      expect(onToggleFilter).toHaveBeenCalledWith("quiet", false);
+    });
+
+    it("clears amenity query parameters while preserving unrelated parameters in URL", () => {
+      (useSearchParams as jest.Mock).mockReturnValue(
+        new URLSearchParams("wifi=true&quiet=true&category=cafe&minDb=40&maxDb=70&q=central"),
+      );
+      render(<VenueFilterBar />);
+
+      const resetBtn = screen.getByTestId("reset-filters-button");
+      fireEvent.click(resetBtn);
+
+      expect(mockReplace).toHaveBeenCalledWith(
+        expect.stringContaining("category=cafe"),
+        { scroll: false },
+      );
+      expect(mockReplace).toHaveBeenCalledWith(
+        expect.stringContaining("minDb=40"),
+        { scroll: false },
+      );
+      expect(mockReplace).toHaveBeenCalledWith(
+        expect.stringContaining("maxDb=70"),
+        { scroll: false },
+      );
+      expect(mockReplace).toHaveBeenCalledWith(
+        expect.stringContaining("q=central"),
+        { scroll: false },
+      );
+      expect(mockReplace).not.toHaveBeenCalledWith(
+        expect.stringContaining("wifi="),
+        expect.anything(),
+      );
+      expect(mockReplace).not.toHaveBeenCalledWith(
+        expect.stringContaining("quiet="),
+        expect.anything(),
+      );
+    });
+
+    it("clears comma-separated amenities query parameter", () => {
+      (useSearchParams as jest.Mock).mockReturnValue(
+        new URLSearchParams("amenities=wifi,coffee&category=coworking"),
+      );
+      render(<VenueFilterBar />);
+
+      const resetBtn = screen.getByTestId("reset-filters-button");
+      expect(resetBtn).toHaveTextContent("Reset filters (2)");
+
+      fireEvent.click(resetBtn);
+
+      expect(mockReplace).toHaveBeenCalledWith("/venues?category=coworking", {
+        scroll: false,
+      });
+    });
+
+    it("works correctly with syncWithUrl=false in uncontrolled mode", () => {
+      const onChange = jest.fn();
+      render(<VenueFilterBar syncWithUrl={false} onFilterChange={onChange} />);
+
+      // Initially no filters and no reset button
+      expect(screen.queryByTestId("reset-filters-button")).not.toBeInTheDocument();
+
+      // Click to toggle wifi
+      const wifiPill = screen.getByTestId("venue-filter-pill-wifi");
+      fireEvent.click(wifiPill);
+
+      expect(wifiPill).toHaveAttribute("aria-checked", "true");
+      expect(onChange).toHaveBeenCalledWith(["wifi"]);
+      expect(mockReplace).not.toHaveBeenCalled();
+
+      // Reset button should now be visible
+      const resetBtn = screen.getByTestId("reset-filters-button");
+      expect(resetBtn).toBeInTheDocument();
+      expect(resetBtn).toHaveTextContent("Reset filters (1)");
+
+      // Click Reset Filters
+      fireEvent.click(resetBtn);
+
+      expect(onChange).toHaveBeenCalledWith([]);
+      expect(wifiPill).toHaveAttribute("aria-checked", "false");
+      expect(screen.queryByTestId("reset-filters-button")).not.toBeInTheDocument();
+      expect(mockReplace).not.toHaveBeenCalled();
     });
   });
 
