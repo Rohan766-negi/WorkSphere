@@ -11,5 +11,51 @@
     "viewSpeedtest": "View Speedtest Screenshot",
     "translate": "Translate",
     "translating": "Translating..."
+  },
+  "reservations": {
+    "title": "Booking Confirmed!",
+    "checkInTime": "Check-in Time",
+    "cancelBooking": "Cancel Booking",
+    "cancel": "Cancel",
+    "duration": "Duration",
+    "date": "Date",
+    "subtitle": "Your workspace at {{venueName}} is reserved.",
+    "scheduledFor": "Scheduled for {{date}} at {{time}}",
+    "checkInAt": "Check-in at {{time}}",
+    "onDate": "On {{date}}",
+    "confirmationId": "Confirmation ID",
+    "copyConfirmationId": "Copy confirmation ID",
+    "copied": "Copied!",
+    "escrowStatus": "Escrow Status:",
+    "manualCopyAriaLabel": "Manual copy fallback",
+    "copyError": "Unable to copy to clipboard. Please copy manually:",
+    "copyInputAriaLabel": "Confirmation code for manual copy",
+    "done": "Done",
+    "reserveWorkspace": "Reserve Workspace",
+    "bookDeskAt": "Book a desk at {{venueName}}",
+    "busyHoursPrompt": "Busy hours or full?",
+    "joinSeatWaitlist": "Join Seat Waitlist",
+    "joinWaitlistInstead": "Join waitlist instead →",
+    "retry": "Retry",
+    "confirmBooking": "Confirm Booking",
+    "confirming": "Confirming...",
+    "confirmingReservation": "Confirming reservation...",
+    "statusPrefix": "Status: {{status}}",
+    "errors": {
+      "holdExpired": "Your 10-minute seat reservation hold has expired. Please retry.",
+      "missingDateAndTime": "Please select both a date and time",
+      "failedToBook": "Failed to book",
+      "escrowFailed": "Escrow transaction failed",
+      "confirmationTimeout": "Confirmation timed out"
+    },
+    "escrowStatuses": {
+      "pending": "Pending escrow deposit...",
+      "processed": "Transaction processed on Solana (optimistic)...",
+      "confirmed": "Transaction confirmed by cluster...",
+      "finalized": "Transaction finalized on Solana...",
+      "fallback_polling": "Confirming via RPC polling...",
+      "failed": "Escrow transaction failed",
+      "timeout": "Confirmation timed out"
+    }
   }
 }

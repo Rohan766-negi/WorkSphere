@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { AlertCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { AddToCalendarButton } from '@/components/bookings/AddToCalendarButton';
 
 import { CopyBookingReferenceButton } from "@/components/bookings/CopyBookingReferenceButton";
@@ -19,6 +20,10 @@ interface BookingModalProps {
   onSuccess: (confirmationId: string) => void;
   confirmationId?: string;
   bookingId?: string;
+  checkInDate?: string;
+  checkInTime?: string;
+  duration?: string;
+  onCancelBooking?: () => void;
   escrowSignature?: string;
   escrowStatus?: EscrowConfirmationStatus;
   onEscrowStatusChange?: (status: EscrowConfirmationStatus) => void;
@@ -56,6 +61,10 @@ export function BookingModal({
   onSuccess,
   confirmationId,
   bookingId,
+  checkInDate,
+  checkInTime,
+  duration,
+  onCancelBooking,
   escrowSignature,
   escrowStatus: propEscrowStatus,
   onEscrowStatusChange,
@@ -64,8 +73,26 @@ export function BookingModal({
   remainingHoldSeconds,
   onHoldExpire,
 }: BookingModalProps) {
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
+  const { t, i18n } = useTranslation();
+  const translate = React.useCallback(
+    (
+      key: string,
+      defaultValue: string,
+      params?: Record<string, string | number>,
+    ): string => {
+      if (i18n?.isInitialized) {
+        return t(key, { defaultValue, ...params });
+      }
+      if (!params) return defaultValue;
+      return defaultValue.replace(/\{\{(\w+)\}\}/g, (_, token: string) =>
+        params[token] !== undefined ? String(params[token]) : `{{${token}}}`,
+      );
+    },
+    [t, i18n],
+  );
+
+  const [date, setDate] = useState(checkInDate ?? "");
+  const [time, setTime] = useState(checkInTime ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showWaitlist, setShowWaitlist] = useState(false);
@@ -81,14 +108,19 @@ export function BookingModal({
   const [isHoldExpired, setIsHoldExpired] = useState(false);
   const isSubmittingRef = React.useRef(false);
 
+  const displayDate = checkInDate || date;
+  const displayTime = checkInTime || time;
   const currentEscrowStatus = propEscrowStatus || internalEscrowStatus;
   const activeConfirmationId = confirmedId || confirmationId;
   const effectiveError =
     error ||
     (currentEscrowStatus === "failed"
-      ? "Escrow transaction failed"
+      ? translate("reservations.errors.escrowFailed", "Escrow transaction failed")
       : currentEscrowStatus === "timeout"
-        ? "Confirmation timed out"
+        ? translate(
+            "reservations.errors.confirmationTimeout",
+            "Confirmation timed out",
+          )
         : "");
 
   // SSE streaming for real-time escrow confirmation monitoring
@@ -122,8 +154,14 @@ export function BookingModal({
                 setError(
                   payload.error ||
                   (status === "timeout"
-                    ? "Confirmation timed out"
-                    : "Escrow transaction failed"),
+                    ? translate(
+                        "reservations.errors.confirmationTimeout",
+                        "Confirmation timed out",
+                      )
+                    : translate(
+                        "reservations.errors.escrowFailed",
+                        "Escrow transaction failed",
+                      )),
                 );
                 eventSource?.close();
               } else if (status === "finalized" || status === "confirmed") {
@@ -166,13 +204,19 @@ export function BookingModal({
     confirmedId,
     onEscrowStatusChange,
     onSuccess,
+    translate,
   ]);
 
   const handleHoldExpire = React.useCallback(() => {
     setIsHoldExpired(true);
-    setError("Your 10-minute seat reservation hold has expired. Please retry.");
+    setError(
+      translate(
+        "reservations.errors.holdExpired",
+        "Your 10-minute seat reservation hold has expired. Please retry.",
+      ),
+    );
     onHoldExpire?.();
-  }, [onHoldExpire]);
+  }, [onHoldExpire, translate]);
 
   React.useEffect(() => {
     if (remainingHoldSeconds !== undefined && remainingHoldSeconds <= 0) {
@@ -208,10 +252,20 @@ export function BookingModal({
   const handleReserve = async () => {
     if (isHoldExpired) {
       return setError(
-        "Your 10-minute seat reservation hold has expired. Please retry.",
+        translate(
+          "reservations.errors.holdExpired",
+          "Your 10-minute seat reservation hold has expired. Please retry.",
+        ),
       );
     }
-    if (!date || !time) return setError("Please select both a date and time");
+    if (!date || !time) {
+      return setError(
+        translate(
+          "reservations.errors.missingDateAndTime",
+          "Please select both a date and time",
+        ),
+      );
+    }
     if (loading || isSubmitting || isSubmittingRef.current) return;
 
     isSubmittingRef.current = true;
@@ -228,7 +282,10 @@ export function BookingModal({
 
       const json = await res.json();
       if (!res.ok) {
-        throw new Error(json.error || "Failed to book");
+        throw new Error(
+          json.error ||
+            translate("reservations.errors.failedToBook", "Failed to book"),
+        );
       }
 
       // Keep the signed offline passcard (when the server issued one) for use with no network. Best effort:
@@ -238,7 +295,10 @@ export function BookingModal({
       setConfirmedId(json.data.confirmationId);
       onSuccess(json.data.confirmationId);
     } catch (err: any) {
-      setError(err.message || "Failed to book");
+      setError(
+        err.message ||
+          translate("reservations.errors.failedToBook", "Failed to book"),
+      );
     } finally {
       setLoading(false);
       setIsSubmitting(false);
@@ -289,15 +349,23 @@ export function BookingModal({
               className="mt-4 text-sm font-semibold text-white"
             >
               {currentEscrowStatus
-                ? getEscrowStatusLabel(currentEscrowStatus)
-                : "Confirming reservation..."}
+                ? translate(
+                    `reservations.escrowStatuses.${currentEscrowStatus}`,
+                    getEscrowStatusLabel(currentEscrowStatus),
+                  )
+                : translate(
+                    "reservations.confirmingReservation",
+                    "Confirming reservation...",
+                  )}
             </p>
             {currentEscrowStatus && (
               <span
                 data-testid="escrow-confirmation-status"
                 className="mt-1 text-xs text-violet-300 font-mono"
               >
-                Status: {currentEscrowStatus}
+                {translate("reservations.statusPrefix", "Status: {{status}}", {
+                  status: currentEscrowStatus,
+                })}
               </span>
             )}
           </div>
@@ -306,20 +374,81 @@ export function BookingModal({
         {activeConfirmationId ? (
           <div>
             <h2 id="booking-modal-title" className="mb-2 text-xl font-bold">
-              Booking Confirmed!
+              {translate("reservations.title", "Booking Confirmed!")}
             </h2>
             <p className="mb-6 text-sm text-zinc-400">
-              Your workspace at{" "}
-              <span className="font-semibold text-zinc-200">{venueName}</span>{" "}
-              is reserved.
+              {translate(
+                "reservations.subtitle",
+                "Your workspace at {{venueName}} is reserved.",
+                { venueName },
+              )}
             </p>
+
+            {(displayDate || displayTime || duration) && (
+              <div
+                data-testid="booking-confirmation-details"
+                className="mb-4 space-y-2 rounded-xl border border-white/10 bg-white/5 p-3 text-sm"
+              >
+                {displayDate && displayTime ? (
+                  <p
+                    data-testid="booking-confirmation-schedule"
+                    className="font-medium text-zinc-200"
+                  >
+                    {translate(
+                      "reservations.scheduledFor",
+                      "Scheduled for {{date}} at {{time}}",
+                      { date: displayDate, time: displayTime },
+                    )}
+                  </p>
+                ) : displayDate ? (
+                  <p
+                    data-testid="booking-confirmation-schedule"
+                    className="font-medium text-zinc-200"
+                  >
+                    {translate("reservations.onDate", "On {{date}}", {
+                      date: displayDate,
+                    })}
+                  </p>
+                ) : null}
+                {displayTime && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-400">
+                      {translate("reservations.checkInTime", "Check-in Time")}
+                    </span>
+                    <span
+                      data-testid="booking-confirmation-checkin-time"
+                      className="font-medium text-zinc-100"
+                    >
+                      {translate(
+                        "reservations.checkInAt",
+                        "Check-in at {{time}}",
+                        { time: displayTime },
+                      )}
+                    </span>
+                  </div>
+                )}
+                {duration && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-400">
+                      {translate("reservations.duration", "Duration")}
+                    </span>
+                    <span
+                      data-testid="booking-confirmation-duration"
+                      className="font-medium text-zinc-100"
+                    >
+                      {duration}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div
               data-testid="booking-confirmation-card"
               className="mb-6 rounded-xl border border-violet-500/20 bg-violet-500/5 p-4"
             >
               <span className="text-xs font-semibold uppercase tracking-wider text-violet-300">
-                Confirmation ID
+                {translate("reservations.confirmationId", "Confirmation ID")}
               </span>
               <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/50 p-3">
                 <span
@@ -330,6 +459,14 @@ export function BookingModal({
                 </span>
                 <CopyBookingReferenceButton
                   referenceId={activeConfirmationId}
+                  tooltipText={translate(
+                    "reservations.copyConfirmationId",
+                    "Copy confirmation ID",
+                  )}
+                  copiedTooltipText={translate(
+                    "reservations.copied",
+                    "Copied!",
+                  )}
                   tooltipPosition="top"
                   testId="copy-confirmation-btn"
                   onError={() => setCopyError(true)}
@@ -341,7 +478,9 @@ export function BookingModal({
                   data-testid="escrow-status-card"
                   className="mt-3 flex items-center justify-between rounded-lg border border-white/5 bg-black/30 px-3 py-2 text-xs"
                 >
-                  <span className="text-zinc-400">Escrow Status:</span>
+                  <span className="text-zinc-400">
+                    {translate("reservations.escrowStatus", "Escrow Status:")}
+                  </span>
                   <span
                     data-testid="escrow-confirmation-status"
                     className="font-mono font-medium text-violet-300 capitalize"
@@ -355,13 +494,19 @@ export function BookingModal({
                 <div
                   data-testid="clipboard-fallback-container"
                   role="region"
-                  aria-label="Manual copy fallback"
+                  aria-label={translate(
+                    "reservations.manualCopyAriaLabel",
+                    "Manual copy fallback",
+                  )}
                   className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs space-y-2 animate-in fade-in"
                 >
                   <div className="flex items-center gap-2 font-medium text-amber-300">
                     <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" />
                     <span>
-                      Unable to copy to clipboard. Please copy manually:
+                      {translate(
+                        "reservations.copyError",
+                        "Unable to copy to clipboard. Please copy manually:",
+                      )}
                     </span>
                   </div>
                   <input
@@ -370,31 +515,53 @@ export function BookingModal({
                     value={activeConfirmationId}
                     data-testid="fallback-confirmation-input"
                     onFocus={(e) => e.target.select()}
-                    aria-label="Confirmation code for manual copy"
+                    aria-label={translate(
+                      "reservations.copyInputAriaLabel",
+                      "Confirmation code for manual copy",
+                    )}
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-100 focus:border-amber-400 focus:outline-none select-all"
                   />
                 </div>
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={onClose}
-              data-testid="booking-done-btn"
-              className="w-full rounded-xl bg-violet-600 p-3 font-semibold text-white hover:bg-violet-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-            >
-              Done
-            </button>
+            <div className="flex gap-3">
+              {onCancelBooking && (
+                <button
+                  type="button"
+                  onClick={onCancelBooking}
+                  data-testid="booking-cancel-btn"
+                  className="flex-1 rounded-xl border border-white/10 p-3 font-semibold text-zinc-300 hover:bg-white/5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
+                  {translate("reservations.cancelBooking", "Cancel Booking")}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                data-testid="booking-done-btn"
+                className="flex-1 rounded-xl bg-violet-600 p-3 font-semibold text-white hover:bg-violet-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                {translate("reservations.done", "Done")}
+              </button>
+            </div>
           </div>
         ) : (
           <div>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 id="booking-modal-title" className="text-xl font-bold">
-                  Reserve Workspace
+                  {translate(
+                    "reservations.reserveWorkspace",
+                    "Reserve Workspace",
+                  )}
                 </h2>
                 <p className="text-sm text-zinc-400">
-                  Book a desk at {venueName}
+                  {translate(
+                    "reservations.bookDeskAt",
+                    "Book a desk at {{venueName}}",
+                    { venueName },
+                  )}
                 </p>
               </div>
               <ReservationTimerBadge
@@ -423,14 +590,17 @@ export function BookingModal({
                     data-testid="booking-retry-btn"
                     className="rounded-lg bg-red-500/20 px-3 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/30 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
                   >
-                    Retry
+                    {translate("reservations.retry", "Retry")}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowWaitlist(true)}
                     className="text-xs font-semibold text-violet-400 hover:text-violet-300 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 dark:focus-visible:ring-offset-slate-900"
                   >
-                    Join waitlist instead →
+                    {translate(
+                      "reservations.joinWaitlistInstead",
+                      "Join waitlist instead →",
+                    )}
                   </button>
                 </div>
               </div>
@@ -442,7 +612,7 @@ export function BookingModal({
                   htmlFor="booking-date-input"
                   className="mb-1 block text-sm text-zinc-400"
                 >
-                  Date
+                  {translate("reservations.date", "Date")}
                 </label>
                 <input
                   id="booking-date-input"
@@ -458,7 +628,7 @@ export function BookingModal({
                   htmlFor="booking-time-input"
                   className="mb-1 block text-sm text-zinc-400"
                 >
-                  Time
+                  {translate("reservations.checkInTime", "Check-in Time")}
                 </label>
                 <input
                   id="booking-time-input"
@@ -472,14 +642,22 @@ export function BookingModal({
             </div>
 
             <div className="flex items-center justify-between border-t border-white/5 pt-4 pb-1">
-              <span className="text-xs text-zinc-400">Busy hours or full?</span>
+              <span className="text-xs text-zinc-400">
+                {translate(
+                  "reservations.busyHoursPrompt",
+                  "Busy hours or full?",
+                )}
+              </span>
               <button
                 type="button"
                 disabled={isPending}
                 onClick={() => setShowWaitlist(true)}
                 className="text-xs font-medium text-violet-400 hover:text-violet-300 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 dark:focus-visible:ring-offset-slate-900 disabled:opacity-50"
               >
-                Join Seat Waitlist
+                {translate(
+                  "reservations.joinSeatWaitlist",
+                  "Join Seat Waitlist",
+                )}
               </button>
             </div>
 
@@ -490,7 +668,7 @@ export function BookingModal({
                 disabled={isPending}
                 className="flex-1 rounded-xl border border-white/10 p-3 text-zinc-300 hover:bg-white/5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 dark:focus-visible:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Cancel
+                {translate("reservations.cancel", "Cancel")}
               </button>
               <button
                 type="button"
@@ -498,7 +676,12 @@ export function BookingModal({
                 disabled={isPending}
                 className="flex-1 rounded-xl bg-violet-600 p-3 font-semibold text-white hover:bg-violet-700 disabled:opacity-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 dark:focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed"
               >
-                {isPending ? "Confirming..." : "Confirm Booking"}
+                {isPending
+                  ? translate("reservations.confirming", "Confirming...")
+                  : translate(
+                      "reservations.confirmBooking",
+                      "Confirm Booking",
+                    )}
               </button>
             </div>
           </div>

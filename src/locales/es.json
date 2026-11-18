@@ -11,5 +11,51 @@
     "viewSpeedtest": "Ver Captura de Speedtest",
     "translate": "Traducir",
     "translating": "Traduciendo..."
+  },
+  "reservations": {
+    "title": "Reserva confirmada",
+    "checkInTime": "Hora de entrada",
+    "cancelBooking": "Cancelar reserva",
+    "cancel": "Cancelar",
+    "duration": "Duración",
+    "date": "Fecha",
+    "subtitle": "Tu espacio de trabajo en {{venueName}} está reservado.",
+    "scheduledFor": "Programado para el {{date}} a las {{time}}",
+    "checkInAt": "Entrada a las {{time}}",
+    "onDate": "El {{date}}",
+    "confirmationId": "ID de confirmación",
+    "copyConfirmationId": "Copiar ID de confirmación",
+    "copied": "¡Copiado!",
+    "escrowStatus": "Estado del depósito:",
+    "manualCopyAriaLabel": "Copia manual alternativa",
+    "copyError": "No se pudo copiar al portapapeles. Por favor, cópialo manualmente:",
+    "copyInputAriaLabel": "Código de confirmación para copia manual",
+    "done": "Listo",
+    "reserveWorkspace": "Reservar espacio de trabajo",
+    "bookDeskAt": "Reserva un escritorio en {{venueName}}",
+    "busyHoursPrompt": "¿Horas pico o lleno?",
+    "joinSeatWaitlist": "Unirse a la lista de espera",
+    "joinWaitlistInstead": "Unirse a la lista de espera →",
+    "retry": "Reintentar",
+    "confirmBooking": "Confirmar reserva",
+    "confirming": "Confirmando...",
+    "confirmingReservation": "Confirmando reserva...",
+    "statusPrefix": "Estado: {{status}}",
+    "errors": {
+      "holdExpired": "Tu reserva temporal de 10 minutos ha expirado. Por favor, inténtalo de nuevo.",
+      "missingDateAndTime": "Por favor, selecciona tanto la fecha como la hora",
+      "failedToBook": "No se pudo completar la reserva",
+      "escrowFailed": "La transacción de depósito falló",
+      "confirmationTimeout": "Se agotó el tiempo de confirmación"
+    },
+    "escrowStatuses": {
+      "pending": "Depósito en garantía pendiente...",
+      "processed": "Transacción procesada en Solana (optimista)...",
+      "confirmed": "Transacción confirmada por el clúster...",
+      "finalized": "Transacción finalizada en Solana...",
+      "fallback_polling": "Confirmando mediante consulta RPC...",
+      "failed": "La transacción de depósito falló",
+      "timeout": "Se agotó el tiempo de confirmación"
+    }
   }
 }
